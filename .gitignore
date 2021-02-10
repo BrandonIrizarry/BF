@@ -1,0 +1,5 @@
+*.o
+*.bf
+loop_stack
+ls_test
+Makefile
