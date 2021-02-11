@@ -1,12 +1,27 @@
 #include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+//#include <string.h>
 
-char *read_program (const char *fname);
+// Use three sentinel values of -1 to prevent
+// pointers (one at the beginning, one in the middle,
+// one at the end) from running past their valid
+// ranges.
+// The left-half of memory is reserved for BF's
+// data block. The right half is used to buffer
+// loop-code.
+#define MEMBLOCK 30000L
+#define START_LOOPSEGMENT (1 + MEMBLOCK + 1)
+#define TOTALMEM (2*MEMBLOCK + 3)
 
-void mem_right (char **m);
-void mem_left (char **m);
+char memory[TOTALMEM];
+
+void right (char **ptr);
+void left (char **ptr);
+/* void loop_mode (FILE **input, char *const base, char *mem); */
+void execute (char ch, char **mem);
+void print_all ();
 
 int main (int argc, char **argv) {
   if (argc != 2) {
@@ -14,134 +29,98 @@ int main (int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  char *const program  = read_program(argv[1]);
+  FILE *input = fopen(argv[1], "r");
 
-  // Give memory two extra cells, for sentinels on either side
-  // that flag whether the pointer has reached invalid memory.
-  char *const memory = calloc(MAX_MEM + 2, sizeof(*memory));
-
-  // Establish left and right bounds to the BF machine's memory.
   memory[0] = -1;
-  memory[MAX_MEM + 1] = -1; 
+  memory[START_LOOPSEGMENT - 1] = -1;
+  memory[TOTALMEM - 1] = -1;
 
-  // Start the data pointer, mem, at the first valid memory cell
+  // initialize all memory
+  for (long i = 0; i < TOTALMEM; i++)
+    if (memory[i] != -1) memory[i] = 0;
+       
   char *mem = memory + 1;
-  
+  char *const base = memory + START_LOOPSEGMENT;
+    
   int ch;
-  char *prog = program;
 
-  while ((ch = *prog)) {
+  // The interpreter's main loop.
+  while (1) {
+    if ((ch = fgetc(input)) == EOF) break;
+    
     if (ch == '[') {
-      if (*mem == 0) {
-	
-      } else {
-	push(mem);
-	prog++;
-      }
-    } else {
-      switch (ch) {
-      case '>':
-	mem_right(&mem);
-	break;
-      case '<':
-	mem_left(&mem);
-	break;
-      case '+': // addition loops back to 0
-	*mem = (*mem + 1) % 128;
-	break;
-      case '-': // subtraction loops back to 127
-	--*mem;
-	if (*mem < 0) {
-	  assert(*mem == -1);
-	  *mem = 127;
-	}
-	break;	
-      default:
-	break;
+      char *loop = base;
+
+      while ((ch = fgetc(input)) != EOF && ch != ']')
+	*loop++ = ch;
+
+      if (ch == EOF) {
+	fprintf(stderr, "Unbalanced loop\n");
+	exit(EXIT_FAILURE);
       }
 
-      // in the absence of a looping construct,
-      // merely advance the program counter by 1.
-      prog++;
-    }
+      while (*mem != 0)
+	for (char *l = base; l != loop; l++)
+	  execute(*l, &mem);
+    } else if (!isspace(ch))
+      execute(ch, &mem);
   }
 
-
-  // for now, simply dump the final state of memory.
-  for (char *p = memory + 1; *p >= 0; ++p) {
-    const char *fmt = (p == mem) ? ">%d " : "%d "; 
-    printf(fmt, *p);
-  }
+  print_all();
   
-  printf("\n");
-  
-  free(memory);
-  free(program);
+  fclose(input);
   return EXIT_SUCCESS;
 }
 
-// The buffer containing the program's source.
-// Because of loops ('[', ']'), we need to make sure that
-// an extra '[' doesn't careen the program off its edge.
-// An extra ']' is easily detectable as an error, by means
-// of a stack; and an extra '[' would simply cause us
-// to hit the null-byte at the end of our program buffer.
-// The easiest way, perhaps, is to simply check if '[' and ']'
-// are balanced at "read time", when we're actually
-// gulping the program in for the first time.
-char *read_program (const char *fname) {
-   char *program = calloc(MAX_IP + 1, sizeof(*program));
-  
-  int ch;
+// Move a pointer across the memory field with bounds-checking.
+void right (char **ptr) {
+  ++*ptr;
 
-  // read in the source
-  FILE *stream = fopen(fname, "r");
-  long i;
-
-  long brackets = 0;
-  
-  for (i = 0; (ch = fgetc(stream)) != EOF && i < MAX_IP; i++) {
-    if (ch == '[') brackets++;
-    if (ch == ']') brackets--;
-    
-    program[i] = ch;
-  }
-
-  fclose(stream);
-
-  if (ch != EOF) {
-    fprintf(stderr, "file not finished being read (maximum source size is %ld bytes)\n", i);
-    exit(EXIT_FAILURE);
-  }
-
-  if (brackets != 0) {
-    fprintf(stderr, "Mismatched loop brackets in program, will not execute.\n");
-    exit(EXIT_FAILURE);
-  }
-  
-  return program;
-}
-
-// increment mem, but guard against falling off the edge of memory.
-void mem_right (char **memref) {
-  ++*memref;
-
-  if (**memref < 0) {
-    fprintf(stderr, "Program causes memory pointer to move too far to the right\n");
+  if (**ptr < 0) {
+    fprintf(stderr, "Program causes '%p' to trespass into invalid memory\n", (void*)*ptr);
     exit(EXIT_FAILURE);
   }
 }
 
-void mem_left (char **memref) {
-  --*memref;
+void left (char **ptr) {
+  --*ptr;
 
-  if (**memref < 0) {
-    fprintf(stderr, "Program causes memory pointer to move too far to the left\n");
+  if (**ptr < 0) {
+    fprintf(stderr, "Program causes '%p' to trespass into invalid memory\n", (void*)*ptr);
     exit(EXIT_FAILURE);
   }
 }
 
-void prog_right (char **progref) {
-  *progref = (*progref == '\0') ? *progref : *progref + 1;
+void print_all () {
+  printf("Data Segment:\n");
+  
+  for (long i = 1; i < START_LOOPSEGMENT - 1; i++)
+    if (memory[i] > 0)
+      printf("[%ld]=%d\n", i - 1, memory[i]);
+
+  printf("Loop segment:\n");
+
+  for (long i = START_LOOPSEGMENT; i < TOTALMEM; i++)
+    if (memory[i] > 0)
+      printf("[%ld]=%d\n", i - 1, memory[i]);
 }
     
+
+void execute (char ch, char **mem) {
+  switch (ch) {
+  case '+':
+    ++**mem; break;
+  case '-':
+    --**mem; break;
+  case '<':
+    left(mem); break;
+  case '>':
+    right(mem); break;
+  case '.':
+    putchar(**mem); break;
+  case ',':
+    **mem = getchar(); break;
+  default:
+    break;
+  } 
+}
