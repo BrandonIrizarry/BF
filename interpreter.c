@@ -74,20 +74,12 @@ int main (int argc, char **argv) {
 	  if (program_buffer[ip] == ']') brackets++;
 	} while (brackets != 0);
 	ip++;
-	continue;
-      } else {
-	push(++ip);
-	continue;
-      }
+      } else push(++ip);
     } else if (ch == ']') {
       if (data_buffer[dp] == 0) {
 	pop();
 	ip++;
-	continue;
-      } else {
-	ip = peek();
-	continue;
-      }
+      } else ip = peek();
     } else {
       switch (ch) {
       case '+':
