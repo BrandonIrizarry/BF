@@ -62,10 +62,12 @@ int main (int argc, char **argv) {
 
   do {
     ch = program_buffer[ip];
-
-    if (ch == '[') {
+    int brackets; // when skipping a loop, you can't find just any ']'...
+    
+    switch (ch) {
+    case '[':
       if (data_buffer[dp] == 0) {
-	int brackets = -1;
+	brackets = -1;
 
 	do {
 	  ip++;
@@ -75,41 +77,43 @@ int main (int argc, char **argv) {
 	} while (brackets != 0);
 	ip++;
       } else push(++ip);
-    } else if (ch == ']') {
+      break;
+    case ']':
       if (data_buffer[dp] == 0) {
 	pop();
 	ip++;
       } else ip = peek();
-    } else {
-      switch (ch) {
-      case '+':
-	data_buffer[dp]++;
-	break;
-      case '-':
-	data_buffer[dp]--;
-	break;
-      case '<':
-	dp--;
-	assert(dp >= 0);
-	break;
-      case '>':
-	dp++;
-	assert(dp < MAX_DATASIZE);
-	break;
-      case '.':
-	putchar(data_buffer[dp]);
-	break;
-      case ',':
-	data_buffer[dp] = getchar();
-	break;
-      default:
-	break;
-      }
-
+      break;
+    case '+':
+      data_buffer[dp]++;
+      ip++;
+      break;
+    case '-':
+      data_buffer[dp]--;
+      ip++;
+      break;
+    case '<':
+      dp--;
+      assert(dp >= 0);
+      ip++;
+      break;
+    case '>':
+      dp++;
+      assert(dp < MAX_DATASIZE);
+      ip++;
+      break;
+    case '.':
+      putchar(data_buffer[dp]);
+      ip++;
+      break;
+    case ',':
+      data_buffer[dp] = getchar();
+      ip++;
+      break;
+    default:
       ip++;
     }
   } while (program_buffer[ip] != '\0');
-  
   
   return EXIT_SUCCESS;
 }
