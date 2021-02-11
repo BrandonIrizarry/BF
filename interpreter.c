@@ -1,10 +1,22 @@
 #include <assert.h>
-#include <ctype.h>
+#include <ctype.h> 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
-#include <string.h>
 
-#include "defs.h"
+// Code used to manage a stack that records loop-starts.
+#define MAX_PROGSIZE 30000
+#define MAX_DATASIZE 30000
+#define MAX_NUMLOOPS 15000
+
+int loop_stack[MAX_NUMLOOPS];
+int sp = 0;
+bool init_complete = false;
+
+void init ();
+void push (int idx);
+int peek ();
+void pop ();
 
 char program_buffer[MAX_PROGSIZE + 1];
 char data_buffer[MAX_DATASIZE];
@@ -108,4 +120,30 @@ int main (int argc, char **argv) {
   
   
   return EXIT_SUCCESS;
+}
+
+// The stack-related methods.
+void init () {
+  for (int i = 0; i < MAX_NUMLOOPS; i++)
+    loop_stack[i] = 0;
+
+  init_complete = true;
+}
+
+void push (int idx) {
+  assert(init_complete && "Call 'init' first\n");
+  assert(sp < MAX_NUMLOOPS);
+  loop_stack[sp++] = idx;
+}
+
+int peek () {
+  assert(init_complete && "Call 'init' first\n");
+  assert(sp > 0);
+  return loop_stack[sp - 1];
+}
+
+void pop () {
+  assert(init_complete && "Call 'init' first\n");
+  assert(sp > 0);
+  --sp;
 }
